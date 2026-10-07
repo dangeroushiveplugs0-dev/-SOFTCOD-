@@ -55,10 +55,10 @@ function SceneContents({ url, mode, onSelect }: { url: string | null; mode: Tran
   return (
     <>
       <color attach="background" args={["#0b0d10"]} />
-      <ambientLight intensity={1.5} />
-      <directionalLight position={[4, 6, 4]} intensity={2.2} castShadow />
+      {lighting && <ambientLight intensity={1.5} />}
+      {lighting && <directionalLight position={[4, 6, 4]} intensity={2.2} castShadow />}
       <Grid infiniteGrid cellSize={0.5} sectionSize={2} fadeDistance={30} />
-      <Environment preset="city" />
+      {lighting && <Environment preset="city" />}
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
       {url ? (
         <Suspense fallback={null}>
@@ -80,6 +80,7 @@ export function App() {
   const [modelName, setModelName] = useState("No model loaded");
   const [mode, setMode] = useState<TransformMode>("translate");
   const [selectedName, setSelectedName] = useState("Nothing selected");
+  const [lighting, setLighting] = useState(true);
 
   const importModel = () => inputRef.current?.click();
 
@@ -101,7 +102,7 @@ export function App() {
     <main className="app-shell">
       <header className="topbar">
         <div><strong>SOFTCOD</strong><span>softbody-collision-drip</span></div>
-        <button className="import-button" onClick={importModel}>Import</button>
+        <div className="top-actions"><button className="light-button" onClick={() => setLighting((value) => !value)}>{lighting ? "Lights" : "Dark"}</button><button className="import-button" onClick={importModel}>Import</button></div>
         <input ref={inputRef} type="file" accept=".glb,model/gltf-binary" hidden onChange={onFile} />
       </header>
 
