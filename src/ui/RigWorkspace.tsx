@@ -6,7 +6,8 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import { AnimationCameraRig, type CameraViewMode } from "./AnimationCameraRig";
 import { RigPanel } from "./RigPanel";
 import { RigEditor, createDefaultRigState, type ModelRigUIState } from "../rigging/RigEditorStable";
-import type { IKMode } from "../rigging/ik/types";
+import type { IKMode, IKChainState } from "../rigging/ik/types";
+import { IKSolver, type IKBoneLike } from "../rigging/ik/IKSolver";
 import { PerformanceManager } from "../performance/PerformanceManager";
 import { testSceneVisibility } from "../performance/SceneCuller";
 import type { PerformanceProfileName } from "../performance/PerformanceProfile";
@@ -23,6 +24,8 @@ function LoadedModel({ model, mode, selectedObjectId, selectedBoneId, rig, activ
   const { scene, animations: gltfAnimations } = useGLTF(model.url);
   const root = useMemo(() => cloneSkeleton(scene), [scene]);
   const mixer = useMemo(() => new THREE.AnimationMixer(root), [root]);
+  const ikSolver = useMemo(() => new IKSolver(), []);
+  const ikStates = useRef(new Map<string, IKChainState>());
   const animationItems = useMemo(() => (gltfAnimations as THREE.AnimationClip[]).map((clip) => ({ id: `${model.id}::${clip.name || "Unnamed"}`, modelId: model.id, modelName: model.name, name: clip.name || "Unnamed", duration: clip.duration })), [gltfAnimations, model.id, model.name]);
   const hierarchyItems = useMemo<HierarchyItem[]>(() => { const items: HierarchyItem[] = []; root.traverse((object) => items.push({ id: `${model.id}::${object.uuid}`, name: object.name || object.type || "Object", type: object.type, modelId: model.id, modelName: model.name })); return items; }, [model.id, model.name, root]);
 
@@ -48,8 +51,61 @@ function LoadedModel({ model, mode, selectedObjectId, selectedBoneId, rig, activ
       const hz = visibility.visible ? profile.animationUpdateHz : profile.distantUpdateHz;
       if (performanceManager.scheduler.shouldUpdate(model.id, hz, now, priority)) mixer.update(delta);
     }
+
+    // IK is evaluated after authored animation, so targets/poles can override
+    // the animated pose without destroying the source clip.
+    if (rig) {
+      for (const chain of rig.chains) {
+        const chainBones: THREE.Bone[] = [];
+        for (const id of chain.boneIds) {
+          let found: THREE.Bone | null = null;
+          root.traverse((object) => {
+            if (object instanceof THREE.Bone && object.uuid === id) found = object;
+          });
+          if (found) chainBones.push(found);
+        }
+        if (chainBones.length === 0) continue;
+
+        const key = chain.id;
+        let stateForChain = ikStates.current.get(key);
+        const bonesForSolver: IKBoneLike[] = chainBones.map((bone, index) => {
+          const child = chainBones[index + 1];
+          const start = bone.getWorldPosition(new THREE.Vector3());
+          const end = child
+            ? child.getWorldPosition(new THREE.Vector3())
+            : start.clone().add(new THREE.Vector3(0, Math.max(0.08, bone.position.length() || 0.25), 0).applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion())));
+          return { id: bone.uuid, object: bone, length: Math.max(0.0001, start.distanceTo(end)) };
+        });
+
+        const definition = {
+          id: chain.id,
+          name: chain.name,
+          boneIds: chain.boneIds,
+          mode: chain.mode,
+          weight: 1,
+          maxStretchRatio: chain.maxStretchRatio,
+          targetPosition: chain.targetPosition,
+          polePosition: chain.polePosition,
+        };
+
+        if (!stateForChain || stateForChain.rest.length !== bonesForSolver.length) {
+          stateForChain = ikSolver.buildState(definition, bonesForSolver);
+          ikStates.current.set(key, stateForChain);
+        } else {
+          stateForChain.chain = definition;
+        }
+
+        ikSolver.solve(
+          stateForChain,
+          bonesForSolver,
+          new THREE.Vector3().fromArray(chain.targetPosition),
+          1,
+          new THREE.Vector3().fromArray(chain.polePosition),
+        );
+      }
+    }
   });
-  useEffect(() => () => { mixer.stopAllAction(); mixer.uncacheRoot(root); URL.revokeObjectURL(model.url); }, [mixer, model.url, root]);
+  useEffect(() => () => { mixer.stopAllAction(); mixer.uncacheRoot(root); ikStates.current.clear(); URL.revokeObjectURL(model.url); }, [ikSolver, mixer, model.url, root]);
 
   let selected: THREE.Object3D | null = null;
   if (selectedObjectId?.startsWith(`${model.id}::`)) {
