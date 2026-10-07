@@ -13,7 +13,7 @@ type SceneModel = { id: string; name: string; url: string };
 type HierarchyItem = { id: string; name: string; type: string; modelId: string; modelName: string };
 type AnimationItem = { id: string; modelId: string; modelName: string; name: string; duration: number };
 
-function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing, onSelect, onHierarchy, onAnimations }: {
+function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing, performanceManager, onSelect, onHierarchy, onAnimations }: {
   model: SceneModel; mode: TransformMode; selectedObjectId: string | null; activeAnimationId: string | null; playing: boolean; performanceManager: PerformanceManager;
   onSelect: (modelId: string, object: THREE.Object3D) => void; onHierarchy: (items: HierarchyItem[]) => void; onAnimations: (items: AnimationItem[]) => void;
 }) {
