@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, TransformControls, useGLTF, Grid, Environment } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -11,21 +11,58 @@ type HierarchyItem = {
   type: string;
 };
 
+type AnimationItem = {
+  name: string;
+  duration: number;
+};
+
 function LoadedModel({
   url,
   mode,
   onSelect,
   onHierarchy,
+  onAnimations,
+  activeAnimation,
+  playing,
 }: {
   url: string;
   mode: TransformMode;
   onSelect: (o: THREE.Object3D | null) => void;
   onHierarchy: (items: HierarchyItem[]) => void;
+  onAnimations: (items: AnimationItem[]) => void;
+  activeAnimation: string | null;
+  playing: boolean;
 }) {
-  const { scene } = useGLTF(url);
+  const { scene, animations: gltfAnimations } = useGLTF(url);
   const [selected, setSelected] = useState<THREE.Object3D | null>(null);
+  const mixer = useMemo(() => new THREE.AnimationMixer(scene), [scene]);
 
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  useEffect(() => () => {
+    mixer.stopAllAction();
+    mixer.uncacheRoot(scene);
+    URL.revokeObjectURL(url);
+  }, [mixer, scene, url]);
+
+  useEffect(() => {
+    onAnimations((gltfAnimations as THREE.AnimationClip[]).map((clip) => ({
+      name: clip.name || "Unnamed",
+      duration: clip.duration,
+    })));
+  }, [gltfAnimations, onAnimations]);
+
+  useEffect(() => {
+    mixer.stopAllAction();
+    if (!activeAnimation) return;
+    const clip = (gltfAnimations as THREE.AnimationClip[]).find((item) => item.name === activeAnimation);
+    if (!clip) return;
+    const action = mixer.clipAction(clip);
+    action.reset().play();
+    action.paused = !playing;
+  }, [activeAnimation, gltfAnimations, mixer, playing]);
+
+  useFrame((_, delta) => {
+    if (playing) mixer.update(delta);
+  });
 
   const root = useMemo(() => {
     const clone = scene.clone(true);
@@ -84,12 +121,18 @@ function SceneContents({
   lighting,
   onSelect,
   onHierarchy,
+  onAnimations,
+  activeAnimation,
+  playing,
 }: {
   url: string | null;
   mode: TransformMode;
   lighting: boolean;
   onSelect: (o: THREE.Object3D | null) => void;
   onHierarchy: (items: HierarchyItem[]) => void;
+  onAnimations: (items: AnimationItem[]) => void;
+  activeAnimation: string | null;
+  playing: boolean;
 }) {
   const { camera } = useThree();
 
@@ -112,6 +155,9 @@ function SceneContents({
             mode={mode}
             onSelect={onSelect}
             onHierarchy={onHierarchy}
+            onAnimations={onAnimations}
+            activeAnimation={activeAnimation}
+            playing={playing}
           />
         </Suspense>
       ) : (
@@ -148,7 +194,10 @@ export function App() {
   const [selectedName, setSelectedName] = useState("Nothing selected");
   const [lighting, setLighting] = useState(true);
   const [hierarchy, setHierarchy] = useState<HierarchyItem[]>([]);
-  const [panel, setPanel] = useState<"outliner" | "inspector" | "lighting">("outliner");
+  const [panel, setPanel] = useState<"outliner" | "inspector" | "lighting" | "animation">("outliner");
+  const [animations, setAnimations] = useState<AnimationItem[]>([]);
+  const [activeAnimation, setActiveAnimation] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   const importModel = () => inputRef.current?.click();
 
@@ -164,6 +213,9 @@ export function App() {
     setModelName(file.name);
     setSelectedName("Nothing selected");
     setHierarchy([]);
+    setAnimations([]);
+    setActiveAnimation(null);
+    setPlaying(false);
     event.target.value = "";
   };
 
@@ -205,6 +257,7 @@ export function App() {
           <div className="panel-tabs">
             <PanelButton active={panel === "outliner"} onClick={() => setPanel("outliner")}>Outliner</PanelButton>
             <PanelButton active={panel === "lighting"} onClick={() => setPanel("lighting")}>Light</PanelButton>
+            <PanelButton active={panel === "animation"} onClick={() => setPanel("animation")}>Anim</PanelButton>
           </div>
 
           {panel === "outliner" && (
@@ -222,6 +275,37 @@ export function App() {
                     <span>{item.name}</span>
                   </button>
                 ))
+              )}
+            </div>
+          )}
+
+          {panel === "animation" && (
+            <div className="animation-panel">
+              {animations.length === 0 ? (
+                <div className="empty-panel">No animation clips found in this GLB.</div>
+              ) : (
+                <>
+                  <div className="animation-controls">
+                    <button className="play-button" onClick={() => setPlaying((value) => !value)}>
+                      {playing ? "Pause" : "Play"}
+                    </button>
+                    <button className="stop-button" onClick={() => { setPlaying(false); setActiveAnimation(null); }}>
+                      Stop
+                    </button>
+                  </div>
+                  <div className="animation-list">
+                    {animations.map((item) => (
+                      <button
+                        key={item.name}
+                        className={activeAnimation === item.name ? "animation-item active" : "animation-item"}
+                        onClick={() => { setActiveAnimation(item.name); setPlaying(true); }}
+                      >
+                        <span>{item.name}</span>
+                        <small>{item.duration.toFixed(2)}s</small>
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -251,6 +335,9 @@ export function App() {
               lighting={lighting}
               onSelect={(object) => setSelectedName(object?.name || object?.type || "Object")}
               onHierarchy={setHierarchy}
+              onAnimations={setAnimations}
+              activeAnimation={activeAnimation}
+              playing={playing}
             />
           </Canvas>
 
