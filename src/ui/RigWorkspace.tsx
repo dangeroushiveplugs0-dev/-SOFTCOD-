@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { AnimationCameraRig, type CameraViewMode } from "./AnimationCameraRig";
 import { RigPanel } from "./RigPanel";
-import { RigEditor, createDefaultRigState, type ModelRigUIState } from "../rigging/RigEditor";
+import { RigEditor, createDefaultRigState, type ModelRigUIState } from "../rigging/RigEditorFixed";
 import type { IKMode } from "../rigging/ik/types";
 import { PerformanceManager } from "../performance/PerformanceManager";
 import { testSceneVisibility } from "../performance/SceneCuller";
