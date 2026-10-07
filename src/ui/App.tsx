@@ -49,7 +49,7 @@ function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing
 
   return <>
     <primitive object={root} onClick={(event: any) => { event.stopPropagation(); onSelect(model.id, event.object as THREE.Object3D); }} />
-    {selected && <TransformControls object={selected} mode={mode} onMouseDown={(event) => event.stopPropagation()} />}
+    {selected && <TransformControls object={selected} mode={mode} />}
   </>;
 }
 
