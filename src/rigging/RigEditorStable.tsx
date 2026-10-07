@@ -1,6 +1,7 @@
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Line, TransformControls } from "@react-three/drei";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import type { IKMode } from "./ik/types";
 
 export type RigChainUI = { id: string; name: string; boneIds: string[]; mode: IKMode; maxStretchRatio: number; targetPosition: [number, number, number]; polePosition: [number, number, number] };
@@ -19,14 +20,97 @@ function endOf(bone: THREE.Bone) {
   return bone.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, Math.max(0.08, bone.position.length() || 0.25), 0).applyQuaternion(q));
 }
 
-function BoneVisual({ bone, selected, onSelect }: { bone: THREE.Bone; selected: boolean; onSelect: () => void }) {
-  const start = bone.getWorldPosition(new THREE.Vector3());
-  const end = endOf(bone);
+type CurveData = { bone: THREE.Bone; localPoint: THREE.Vector3 };
+
+function buildBoneCurveData(root: THREE.Object3D, bones: THREE.Bone[]): CurveData[] {
+  const meshes: THREE.SkinnedMesh[] = [];
+  root.traverse((object) => { if (object instanceof THREE.SkinnedMesh) meshes.push(object); });
+
+  return bones.map((bone) => {
+    const weighted = new THREE.Vector3();
+    let total = 0;
+    const boneWorldInverse = new THREE.Matrix4().copy(bone.matrixWorld).invert();
+
+    for (const mesh of meshes) {
+      const index = mesh.skeleton.bones.indexOf(bone);
+      if (index < 0) continue;
+
+      const position = mesh.geometry.getAttribute("position");
+      const skinIndex = mesh.geometry.getAttribute("skinIndex");
+      const skinWeight = mesh.geometry.getAttribute("skinWeight");
+      if (!position || !skinIndex || !skinWeight) continue;
+
+      const stride = Math.max(1, Math.floor(position.count / 600));
+      const local = new THREE.Vector3();
+      const world = new THREE.Vector3();
+
+      for (let i = 0; i < position.count; i += stride) {
+        let weight = 0;
+        for (let j = 0; j < 4; j++) {
+          if (skinIndex.getComponent(i, j) === index) weight += skinWeight.getComponent(i, j);
+        }
+        if (weight <= 0.01) continue;
+
+        local.fromBufferAttribute(position, i);
+        world.copy(local);
+        mesh.localToWorld(world);
+        world.applyMatrix4(boneWorldInverse);
+        weighted.addScaledVector(world, weight);
+        total += weight;
+      }
+    }
+
+    if (total > 0) return { bone, localPoint: weighted.multiplyScalar(1 / total) };
+
+    const start = bone.getWorldPosition(new THREE.Vector3());
+    const end = endOf(bone);
+    return { bone, localPoint: bone.worldToLocal(start.lerp(end, 0.5)) };
+  });
+}
+
+function BoneVisual({ bone, selected, onSelect, curveData }: { bone: THREE.Bone; selected: boolean; onSelect: () => void; curveData: CurveData | undefined }) {
+  const [points, setPoints] = useState<[THREE.Vector3, THREE.Vector3, THREE.Vector3] | null>(null);
+  const accumulator = useRef(0);
+  const curveWorld = useRef(new THREE.Vector3());
+
+  useFrame((_, delta) => {
+    if (!curveData) return;
+    accumulator.current += delta;
+    if (accumulator.current < 1 / 30) return;
+    accumulator.current = 0;
+
+    const start = bone.getWorldPosition(new THREE.Vector3());
+    const end = endOf(bone);
+    curveWorld.current.copy(curveData.localPoint).applyMatrix4(bone.matrixWorld);
+
+    // Keep the bend subtle. The visible bone follows the mesh influence without
+    // turning the rig line into a noodle.
+    const mid = start.clone().lerp(end, 0.5);
+    mid.lerp(curveWorld.current, 0.72);
+    setPoints([start, mid, end]);
+  });
+
+  const initialStart = bone.getWorldPosition(new THREE.Vector3());
+  const initialEnd = endOf(bone);
+  const initialMid = initialStart.clone().lerp(initialEnd, 0.5);
+  const visiblePoints = points ?? [initialStart, initialMid, initialEnd];
+
   return <>
-    <Line points={[start, end]} lineWidth={selected ? 4 : 2} color={selected ? "#ffffff" : "#8b95a5"} />
-    <mesh position={start} onClick={(event) => { event.stopPropagation(); onSelect(); }}>
-      <sphereGeometry args={[selected ? 0.065 : 0.045, 10, 10]} />
+    <Line points={visiblePoints} lineWidth={selected ? 5 : 3} color={selected ? "#ffffff" : "#8b95a5"} />
+    <mesh
+      position={initialStart}
+      onClick={(event) => { event.stopPropagation(); onSelect(); }}
+    >
+      <sphereGeometry args={[selected ? 0.085 : 0.065, 12, 12]} />
       <meshBasicMaterial color={selected ? "#ffffff" : "#aab3c0"} />
+    </mesh>
+    {/* Large invisible hitbox: the bone is visually a thin line, but remains easy to grab on mobile. */}
+    <mesh
+      position={initialStart.clone().lerp(initialEnd, 0.5)}
+      onClick={(event) => { event.stopPropagation(); onSelect(); }}
+    >
+      <capsuleGeometry args={[selected ? 0.12 : 0.105, Math.max(0.12, initialStart.distanceTo(initialEnd)), 4, 8]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
     </mesh>
   </>;
 }
@@ -43,10 +127,40 @@ function Handle({ object, kind, selected, onSelect, onChange, onDraggingChange }
 }
 
 export function RigEditor({ root, rig, selectedBoneId, selectedChainId, selectedGizmo, onSelectBone, onSelectChain, onSelectGizmo, onUpdateTarget, onUpdatePole, onDraggingChange }: Props) {
-  const bones = useMemo(() => { const result: THREE.Bone[] = []; root.traverse((object) => { if (object instanceof THREE.Bone) result.push(object); }); return result; }, [root]);
+  const bones = useMemo(() => {
+    const result: THREE.Bone[] = [];
+    root.traverse((object) => { if (object instanceof THREE.Bone) result.push(object); });
+    return result;
+  }, [root]);
+
   const boneById = useMemo(() => new Map(bones.map((bone) => [bone.uuid, bone])), [bones]);
-  const [targets] = useState(() => new Map(rig.chains.map((chain) => { const object = new THREE.Object3D(); object.name = `IK Target: ${chain.name}`; object.position.fromArray(chain.targetPosition); return [chain.id, object] as const; })));
-  const [poles] = useState(() => new Map(rig.chains.map((chain) => { const object = new THREE.Object3D(); object.name = `IK Pole: ${chain.name}`; object.position.fromArray(chain.polePosition); return [chain.id, object] as const; })));
+  const curveData = useMemo(() => buildBoneCurveData(root, bones), [root, bones]);
+  const curveById = useMemo(() => new Map(curveData.map((item) => [item.bone.uuid, item])), [curveData]);
+
+  // One joint sphere per actual joint, rather than two overlapping spheres per bone.
+  // A shared parent/child location is therefore represented once.
+  const joints = useMemo(() => {
+    const result = new Map<string, THREE.Bone>();
+    bones.forEach((bone) => {
+      const key = bone.uuid;
+      result.set(key, bone);
+    });
+    return [...result.values()];
+  }, [bones]);
+
+  const [targets] = useState(() => new Map(rig.chains.map((chain) => {
+    const object = new THREE.Object3D();
+    object.name = `IK Target: ${chain.name}`;
+    object.position.fromArray(chain.targetPosition);
+    return [chain.id, object] as const;
+  })));
+
+  const [poles] = useState(() => new Map(rig.chains.map((chain) => {
+    const object = new THREE.Object3D();
+    object.name = `IK Pole: ${chain.name}`;
+    object.position.fromArray(chain.polePosition);
+    return [chain.id, object] as const;
+  })));
 
   useLayoutEffect(() => {
     rig.chains.forEach((chain) => {
@@ -56,7 +170,30 @@ export function RigEditor({ root, rig, selectedBoneId, selectedChainId, selected
   }, [rig, targets, poles]);
 
   return <group>
-    {bones.map((bone) => <BoneVisual key={bone.uuid} bone={bone} selected={selectedBoneId === bone.uuid} onSelect={() => onSelectBone(bone)} />)}
+    {bones.map((bone) => (
+      <BoneVisual
+        key={bone.uuid}
+        bone={bone}
+        curveData={curveById.get(bone.uuid)}
+        selected={selectedBoneId === bone.uuid}
+        onSelect={() => onSelectBone(bone)}
+      />
+    ))}
+
+    {joints.map((bone) => {
+      const selected = selectedBoneId === bone.uuid;
+      return (
+        <mesh
+          key={`joint-${bone.uuid}`}
+          position={bone.getWorldPosition(new THREE.Vector3())}
+          onClick={(event) => { event.stopPropagation(); onSelectBone(bone); }}
+        >
+          <sphereGeometry args={[selected ? 0.105 : 0.075, 14, 14]} />
+          <meshBasicMaterial color={selected ? "#ffffff" : "#aab3c0"} />
+        </mesh>
+      );
+    })}
+
     {rig.chains.map((chain) => {
       const target = targets.get(chain.id);
       const pole = poles.get(chain.id);
@@ -70,7 +207,10 @@ export function RigEditor({ root, rig, selectedBoneId, selectedChainId, selected
         <Handle object={pole} kind="pole" selected={active && selectedGizmo === "pole"} onSelect={() => { onSelectChain(chain.id); onSelectGizmo("pole"); }} onChange={() => onUpdatePole(chain.id, pole.position.toArray() as [number, number, number])} onDraggingChange={onDraggingChange} />
       </group>;
     })}
-    {selectedBoneId && boneById.get(selectedBoneId) && <TransformControls object={boneById.get(selectedBoneId)!} mode="rotate" size={0.7} onMouseDown={() => onDraggingChange(true)} onMouseUp={() => onDraggingChange(false)} />}
+
+    {selectedBoneId && boneById.get(selectedBoneId) && (
+      <TransformControls object={boneById.get(selectedBoneId)!} mode="rotate" size={0.7} onMouseDown={() => onDraggingChange(true)} onMouseUp={() => onDraggingChange(false)} />
+    )}
   </group>;
 }
 
