@@ -5,6 +5,8 @@ import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { AnimationCameraRig, type CameraViewMode } from "./AnimationCameraRig";
 import { PerformanceManager } from "../performance/PerformanceManager";
+import { testSceneVisibility } from "../performance/SceneCuller";
+import type { PerformanceProfileName } from "../performance/PerformanceProfile";
 
 type TransformMode = "translate" | "rotate" | "scale";
 type SceneModel = { id: string; name: string; url: string };
@@ -18,7 +20,6 @@ function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing
   const { scene, animations: gltfAnimations } = useGLTF(model.url);
   const root = useMemo(() => cloneSkeleton(scene), [scene]);
   const mixer = useMemo(() => new THREE.AnimationMixer(root), [root]);
-  const performanceManager = useMemo(() => new PerformanceManager(), []);
   const animationItems = useMemo(() => (gltfAnimations as THREE.AnimationClip[]).map((clip) => ({
     id: `${model.id}::${clip.name || "Unnamed"}`, modelId: model.id, modelName: model.name, name: clip.name || "Unnamed", duration: clip.duration,
   })), [gltfAnimations, model.id, model.name]);
@@ -59,14 +60,18 @@ function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing
   </>;
 }
 
-function SceneContents({ models, mode, lighting, selectedObjectId, activeAnimationId, playing, cameraMode, syncCameraFromEditor, onSelect, onHierarchy, onAnimations }: {
-  models: SceneModel[]; mode: TransformMode; lighting: boolean; selectedObjectId: string | null; activeAnimationId: string | null; playing: boolean; cameraMode: CameraViewMode; syncCameraFromEditor: number;
+function SceneContents({ models, mode, lighting, selectedObjectId, activeAnimationId, playing, cameraMode, syncCameraFromEditor, performanceProfile, onSelect, onHierarchy, onAnimations }: {
+  models: SceneModel[]; mode: TransformMode; lighting: boolean; selectedObjectId: string | null; activeAnimationId: string | null; playing: boolean; cameraMode: CameraViewMode; syncCameraFromEditor: number; performanceProfile: PerformanceProfileName;
   onSelect: (modelId: string, object: THREE.Object3D) => void; onHierarchy: (items: HierarchyItem[]) => void; onAnimations: (items: AnimationItem[]) => void;
 }) {
   const { camera } = useThree();
   const performanceManager = useMemo(() => new PerformanceManager(), []);
   useEffect(() => { camera.position.set(3, 2, 5); }, [camera]);
-  useFrame((state) => { performanceManager.beginFrame(state.clock.elapsedTime * 1000); performanceManager.endFrame(state.clock.elapsedTime * 1000); });
+  useEffect(() => { performanceManager.setProfile(performanceProfile); }, [performanceManager, performanceProfile]);
+  useFrame(() => {
+    performanceManager.beginFrame(performance.now());
+    performanceManager.endFrame(performance.now());
+  });
   return <>
     <color attach="background" args={["#0b0d10"]} />
     {lighting && <ambientLight intensity={1.5} />}
@@ -77,7 +82,7 @@ function SceneContents({ models, mode, lighting, selectedObjectId, activeAnimati
     {cameraMode === "editor" && <OrbitControls key="editor-camera-controls" makeDefault enableDamping dampingFactor={0.08} />
     }
     {models.length === 0 ? <mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color="#6b7280" /></mesh> :
-      <Suspense fallback={null}>{models.map((model) => <LoadedModel key={model.id} model={model} mode={mode} selectedObjectId={selectedObjectId} activeAnimationId={activeAnimationId} playing={playing} onSelect={onSelect} onHierarchy={onHierarchy} onAnimations={onAnimations} />)}</Suspense>}
+      <Suspense fallback={null}>{models.map((model) => <LoadedModel key={model.id} model={model} mode={mode} selectedObjectId={selectedObjectId} activeAnimationId={activeAnimationId} playing={playing} performanceManager={performanceManager} onSelect={onSelect} onHierarchy={onHierarchy} onAnimations={onAnimations} />)}</Suspense>}
   </>;
 }
 
@@ -145,7 +150,7 @@ export function App() {
       </aside>
       <section className="viewport-shell">
         <Canvas camera={{ position: [3, 2, 5], fov: 45 }} dpr={[1, 1.75]} gl={{ antialias: true }}>
-          <SceneContents models={models} mode={mode} lighting={lighting} selectedObjectId={selectedObjectId} activeAnimationId={activeAnimationId} playing={playing} cameraMode={cameraMode} syncCameraFromEditor={syncCameraFromEditor}
+          <SceneContents models={models} mode={mode} lighting={lighting} selectedObjectId={selectedObjectId} activeAnimationId={activeAnimationId} playing={playing} cameraMode={cameraMode} syncCameraFromEditor={syncCameraFromEditor} performanceProfile={performanceProfile}
             onSelect={(modelId, object) => { setSelectedObjectId(`${modelId}::${object.uuid}`); setSelectedName(object.name || object.type || "Object"); }}
             onHierarchy={(items) => setHierarchy((current) => [...current.filter((item) => !items.length || item.modelId !== items[0].modelId), ...items])}
             onAnimations={(items) => setAnimations((current) => [...current.filter((item) => !items.length || item.modelId !== items[0].modelId), ...items])} />
