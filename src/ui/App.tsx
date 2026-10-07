@@ -29,8 +29,6 @@ function LoadedModel({
 
   const root = useMemo(() => {
     const clone = scene.clone(true);
-    const items: HierarchyItem[] = [];
-
     clone.traverse((object) => {
       object.userData.sofcodSelectable = true;
       if ((object as THREE.Mesh).isMesh) {
@@ -38,16 +36,25 @@ function LoadedModel({
         mesh.castShadow = true;
         mesh.receiveShadow = true;
       }
+    });
+    return clone;
+  }, [scene]);
+
+  const hierarchyItems = useMemo<HierarchyItem[]>(() => {
+    const items: HierarchyItem[] = [];
+    root.traverse((object) => {
       items.push({
         id: object.uuid,
         name: object.name || object.type || "Object",
         type: object.type,
       });
     });
+    return items;
+  }, [root]);
 
-    onHierarchy(items);
-    return clone;
-  }, [scene, onHierarchy]);
+  useEffect(() => {
+    onHierarchy(hierarchyItems);
+  }, [hierarchyItems, onHierarchy]);
 
   return (
     <>
