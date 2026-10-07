@@ -55,7 +55,7 @@ export class IKSolver {
     };
   }
 
-  solve(state: IKChainState, bones: IKBoneLike[], target: THREE.Vector3, weight = state.chain.weight): IKChainState {
+  solve(state: IKChainState, bones: IKBoneLike[], target: THREE.Vector3, weight = state.chain.weight, pole?: THREE.Vector3): IKChainState {
     if (bones.length === 0) return state;
 
     const root = worldPosition(bones[0].object);
@@ -112,7 +112,29 @@ export class IKSolver {
         ? points[i + 1]
         : effectiveTarget;
       const start = points[i];
-      rotateBoneToward(bones[i].object, end.clone().sub(start), weight);
+      const direction = end.clone().sub(start);
+      rotateBoneToward(bones[i].object, direction, weight);
+
+      // Pole control changes the bend plane without changing the target.
+      // This keeps elbows/knees pointed toward the artist's pole handle.
+      if (pole && i < bones.length - 1) {
+        const axis = direction.normalize();
+        const toPole = pole.clone().sub(start);
+        const poleProjected = toPole.clone().sub(axis.clone().multiplyScalar(toPole.dot(axis)));
+        const toChild = points[i + 1].clone().sub(start);
+        const childProjected = toChild.clone().sub(axis.clone().multiplyScalar(toChild.dot(axis)));
+        if (poleProjected.lengthSq() > 1e-8 && childProjected.lengthSq() > 1e-8) {
+          const a = childProjected.normalize();
+          const b = poleProjected.normalize();
+          const cross = a.clone().cross(b);
+          const angle = Math.atan2(cross.dot(axis), a.dot(b));
+          const worldQ = bones[i].object.getWorldQuaternion(new THREE.Quaternion());
+          const roll = new THREE.Quaternion().setFromAxisAngle(axis, angle * THREE.MathUtils.clamp(weight, 0, 1));
+          const desiredWorld = roll.multiply(worldQ);
+          const parentQ = bones[i].object.parent?.getWorldQuaternion(new THREE.Quaternion()) ?? new THREE.Quaternion();
+          bones[i].object.quaternion.copy(parentQ.invert().multiply(desiredWorld));
+        }
+      }
 
       const baseScale = state.restScales[i];
       bones[i].object.scale.copy(baseScale);
