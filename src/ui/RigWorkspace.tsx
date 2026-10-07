@@ -139,7 +139,7 @@ function SceneContents({ models, mode, lighting, selectedObjectId, selectedBoneI
     {lighting && <Environment preset="city" />}
     <AnimationCameraRig mode={cameraMode} syncFromEditor={syncCameraFromEditor} />
     {cameraMode === "editor" && <OrbitControls key="editor-camera-controls" makeDefault enableDamping dampingFactor={0.08} enabled={!gizmoDragging} />}
-    {models.length === 0 ? <mesh><boxGeometry args={[1, 1, 1]} /><meshStandardMaterial color="#6b7280" /></mesh> : <Suspense fallback={null}>{models.map((model) => <LoadedModel key={model.id} model={model} mode={mode} selectedObjectId={selectedObjectId} selectedBoneId={selectedBoneId} rig={rigs[model.id] ?? null} activeAnimationId={activeAnimationId} playing={playing} performanceManager={performanceManager} selectedChainId={selectedChainId} selectedGizmo={selectedGizmo} onSelect={onSelect} onBoneSelect={onBoneSelect} onRigReady={onRigReady} onUpdateTarget={onUpdateTarget} onUpdatePole={onUpdatePole} onChainSelect={onChainSelect} onGizmoSelect={onGizmoSelect} onHierarchy={onHierarchy} onAnimations={onAnimations} />)}</Suspense>}
+    {models.length > 0 && <Suspense fallback={null}>{models.map((model) => <LoadedModel key={model.id} model={model} mode={mode} selectedObjectId={selectedObjectId} selectedBoneId={selectedBoneId} rig={rigs[model.id] ?? null} activeAnimationId={activeAnimationId} playing={playing} performanceManager={performanceManager} selectedChainId={selectedChainId} selectedGizmo={selectedGizmo} onSelect={onSelect} onBoneSelect={onBoneSelect} onRigReady={onRigReady} onUpdateTarget={onUpdateTarget} onUpdatePole={onUpdatePole} onChainSelect={onChainSelect} onGizmoSelect={onGizmoSelect} onHierarchy={onHierarchy} onAnimations={onAnimations} />)}</Suspense>}
   </>;
 }
 
@@ -179,9 +179,9 @@ export function RigWorkspace() {
   const selectBone = (modelId: string, bone: THREE.Bone) => { setSelectedModelId(modelId); setSelectedObjectId(`${modelId}::${bone.uuid}`); setSelectedBoneId(bone.uuid); setSelectedName(bone.name || "Bone"); setSelectedChainId(null); setSelectedGizmo(null); setPanel("rig"); };
 
   const onFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const glbs = Array.from(event.target.files ?? []).filter((file) => /\.glb$/i.test(file.name));
-    if (!glbs.length) return;
-    const added = glbs.map((file) => ({ id: crypto.randomUUID(), name: file.name, url: URL.createObjectURL(file) }));
+    const files = Array.from(event.target.files ?? []).filter((file) => /\.(glb|gltf)$/i.test(file.name));
+    if (!files.length) return;
+    const added = files.map((file) => ({ id: crypto.randomUUID(), name: file.name, url: URL.createObjectURL(file) }));
     setModels((current) => [...current, ...added]);
     if (!selectedModelId && added[0]) setSelectedModelId(added[0].id);
     event.target.value = "";
@@ -197,7 +197,7 @@ export function RigWorkspace() {
   const selectedRig = selectedModelId ? rigs[selectedModelId] ?? null : null;
 
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><strong>SOFTCOD</strong><span>{models.length} model{models.length === 1 ? "" : "s"} in scene</span></div><div className="top-actions"><button className="light-button" onClick={() => setLighting((value) => !value)}>{lighting ? "Lights" : "Dark"}</button><button className="import-button" onClick={() => inputRef.current?.click()}>Import</button>{models.length > 0 && <button className="clear-button" onClick={clear}>Clear</button>}</div><input ref={inputRef} type="file" accept=".glb,model/gltf-binary" multiple hidden onChange={onFiles} /></header>
+    <header className="topbar"><div className="brand"><strong>SOFTCOD</strong><span>{models.length} model{models.length === 1 ? "" : "s"} in scene</span></div><div className="top-actions"><button className="light-button" onClick={() => setLighting((value) => !value)}>{lighting ? "Lights" : "Dark"}</button><button className="import-button" onClick={() => inputRef.current?.click()}>Import</button>{models.length > 0 && <button className="clear-button" onClick={clear}>Clear</button>}</div><input ref={inputRef} type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json,application/octet-stream" multiple onChange={onFiles} /></header>
     <section className="editor-layout">
       <aside className="side-panel left-panel">
         <div className="panel-heading"><strong>Rig Editor</strong><span>{models.length} model{models.length === 1 ? "" : "s"}</span></div>
