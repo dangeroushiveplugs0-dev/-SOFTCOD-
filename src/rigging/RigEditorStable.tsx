@@ -31,6 +31,8 @@ function sampleSkinnedVertex(mesh: THREE.SkinnedMesh, vertexIndex: number, targe
   if (!position || !skinIndex || !skinWeight) return target.set(0, 0, 0);
 
   mesh.skeleton.update();
+  const boneMatrices = mesh.skeleton.boneMatrices;
+  if (!boneMatrices) return target.set(0, 0, 0);
 
   const source = new THREE.Vector3().fromBufferAttribute(position, vertexIndex).applyMatrix4(mesh.bindMatrix);
   const skinned = new THREE.Vector3();
@@ -40,7 +42,7 @@ function sampleSkinnedVertex(mesh: THREE.SkinnedMesh, vertexIndex: number, targe
     const weight = skinWeight.getComponent(vertexIndex, j);
     if (weight === 0) continue;
     const boneIndex = skinIndex.getComponent(vertexIndex, j);
-    boneMatrix.fromArray(mesh.skeleton.boneMatrices, boneIndex * 16);
+    boneMatrix.fromArray(boneMatrices, boneIndex * 16);
     skinned.addScaledVector(source.clone().applyMatrix4(boneMatrix), weight);
   }
 
