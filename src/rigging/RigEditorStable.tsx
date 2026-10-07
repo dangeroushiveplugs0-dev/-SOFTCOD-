@@ -24,6 +24,29 @@ type CurveSample = { mesh: THREE.SkinnedMesh; vertexIndex: number; weight: numbe
 
 type CurveData = { bone: THREE.Bone; samples: CurveSample[]; fallbackLocalPoint: THREE.Vector3 };
 
+function sampleSkinnedVertex(mesh: THREE.SkinnedMesh, vertexIndex: number, target: THREE.Vector3): THREE.Vector3 {
+  const position = mesh.geometry.getAttribute("position");
+  const skinIndex = mesh.geometry.getAttribute("skinIndex");
+  const skinWeight = mesh.geometry.getAttribute("skinWeight");
+  if (!position || !skinIndex || !skinWeight) return target.set(0, 0, 0);
+
+  mesh.skeleton.update();
+
+  const source = new THREE.Vector3().fromBufferAttribute(position, vertexIndex).applyMatrix4(mesh.bindMatrix);
+  const skinned = new THREE.Vector3();
+  const boneMatrix = new THREE.Matrix4();
+
+  for (let j = 0; j < 4; j++) {
+    const weight = skinWeight.getComponent(vertexIndex, j);
+    if (weight === 0) continue;
+    const boneIndex = skinIndex.getComponent(vertexIndex, j);
+    boneMatrix.fromArray(mesh.skeleton.boneMatrices, boneIndex * 16);
+    skinned.addScaledVector(source.clone().applyMatrix4(boneMatrix), weight);
+  }
+
+  return target.copy(skinned).applyMatrix4(mesh.bindMatrixInverse);
+}
+
 function buildBoneCurveData(root: THREE.Object3D, bones: THREE.Bone[]): CurveData[] {
   const meshes: THREE.SkinnedMesh[] = [];
   root.traverse((object) => { if (object instanceof THREE.SkinnedMesh) meshes.push(object); });
@@ -80,8 +103,7 @@ function BoneVisual({ bone, selected, onSelect, curveData }: { bone: THREE.Bone;
       let totalWeight = 0;
       for (const sample of curveData.samples) {
         const position = sample.mesh.geometry.getAttribute("position");
-        source.fromBufferAttribute(position, sample.vertexIndex);
-        sample.mesh.boneTransform(sample.vertexIndex, source);
+        sampleSkinnedVertex(sample.mesh, sample.vertexIndex, source);
         sample.mesh.localToWorld(source);
         deformed.addScaledVector(source, sample.weight);
         totalWeight += sample.weight;
