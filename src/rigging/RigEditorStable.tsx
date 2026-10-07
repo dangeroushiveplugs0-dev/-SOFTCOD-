@@ -20,16 +20,16 @@ function endOf(bone: THREE.Bone) {
   return bone.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, Math.max(0.08, bone.position.length() || 0.25), 0).applyQuaternion(q));
 }
 
-type CurveData = { bone: THREE.Bone; localPoint: THREE.Vector3 };
+type CurveSample = { mesh: THREE.SkinnedMesh; vertexIndex: number; weight: number };
+
+type CurveData = { bone: THREE.Bone; samples: CurveSample[]; fallbackLocalPoint: THREE.Vector3 };
 
 function buildBoneCurveData(root: THREE.Object3D, bones: THREE.Bone[]): CurveData[] {
   const meshes: THREE.SkinnedMesh[] = [];
   root.traverse((object) => { if (object instanceof THREE.SkinnedMesh) meshes.push(object); });
 
   return bones.map((bone) => {
-    const weighted = new THREE.Vector3();
-    let total = 0;
-    const boneWorldInverse = new THREE.Matrix4().copy(bone.matrixWorld).invert();
+    const samples: CurveSample[] = [];
 
     for (const mesh of meshes) {
       const index = mesh.skeleton.bones.indexOf(bone);
@@ -41,32 +41,25 @@ function buildBoneCurveData(root: THREE.Object3D, bones: THREE.Bone[]): CurveDat
       if (!position || !skinIndex || !skinWeight) continue;
 
       const stride = Math.max(1, Math.floor(position.count / 600));
-      const local = new THREE.Vector3();
-      const world = new THREE.Vector3();
-
       for (let i = 0; i < position.count; i += stride) {
         let weight = 0;
         for (let j = 0; j < 4; j++) {
           if (skinIndex.getComponent(i, j) === index) weight += skinWeight.getComponent(i, j);
         }
-        if (weight <= 0.01) continue;
-
-        local.fromBufferAttribute(position, i);
-        world.copy(local);
-        mesh.localToWorld(world);
-        world.applyMatrix4(boneWorldInverse);
-        weighted.addScaledVector(world, weight);
-        total += weight;
+        if (weight > 0.01) samples.push({ mesh, vertexIndex: i, weight });
       }
     }
 
-    if (total > 0) return { bone, localPoint: weighted.multiplyScalar(1 / total) };
-
     const start = bone.getWorldPosition(new THREE.Vector3());
     const end = endOf(bone);
-    return { bone, localPoint: bone.worldToLocal(start.lerp(end, 0.5)) };
+    return {
+      bone,
+      samples,
+      fallbackLocalPoint: bone.worldToLocal(start.lerp(end, 0.5))
+    };
   });
 }
+
 
 function BoneVisual({ bone, selected, onSelect, curveData }: { bone: THREE.Bone; selected: boolean; onSelect: () => void; curveData: CurveData | undefined }) {
   const [points, setPoints] = useState<[THREE.Vector3, THREE.Vector3, THREE.Vector3] | null>(null);
@@ -81,7 +74,26 @@ function BoneVisual({ bone, selected, onSelect, curveData }: { bone: THREE.Bone;
 
     const start = bone.getWorldPosition(new THREE.Vector3());
     const end = endOf(bone);
-    curveWorld.current.copy(curveData.localPoint).applyMatrix4(bone.matrixWorld);
+    if (curveData.samples.length > 0) {
+      const deformed = new THREE.Vector3();
+      const source = new THREE.Vector3();
+      let totalWeight = 0;
+      for (const sample of curveData.samples) {
+        sample.mesh.getVertexPosition?.(sample.vertexIndex, source);
+        if (!sample.mesh.getVertexPosition) {
+          const position = sample.mesh.geometry.getAttribute("position");
+          source.fromBufferAttribute(position, sample.vertexIndex);
+          sample.mesh.boneTransform(sample.vertexIndex, source);
+        }
+        sample.mesh.localToWorld(source);
+        deformed.addScaledVector(source, sample.weight);
+        totalWeight += sample.weight;
+      }
+      if (totalWeight > 0) curveWorld.current.copy(deformed).multiplyScalar(1 / totalWeight);
+      else curveWorld.current.copy(curveData.fallbackLocalPoint).applyMatrix4(bone.matrixWorld);
+    } else {
+      curveWorld.current.copy(curveData.fallbackLocalPoint).applyMatrix4(bone.matrixWorld);
+    }
 
     // Keep the bend subtle. The visible bone follows the mesh influence without
     // turning the rig line into a noodle.
