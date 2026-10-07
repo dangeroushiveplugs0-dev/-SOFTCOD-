@@ -26,6 +26,7 @@ export type IKChainState = {
   currentLengths: number[];
   stretchAmount: number;
   solved: boolean;
+  restScales: THREE.Vector3[];
 };
 
 export type SecondaryMotionSettings = {
