@@ -87,7 +87,7 @@ export function App() {
   const [hierarchy, setHierarchy] = useState<HierarchyItem[]>([]);
   const [animations, setAnimations] = useState<AnimationItem[]>([]);
   const [panel, setPanel] = useState<"outliner" | "lighting" | "animation" | "camera">("outliner");
-  const [cameraMode, setCameraMode] = useState<CameraViewMode>("editor");
+  const [cameraMode, setCameraMode] = useState<CameraViewMode>("editor");\n  const [performanceProfile, setPerformanceProfile] = useState<"auto" | "battery" | "balanced" | "quality">("auto");
   const [syncCameraFromEditor, setSyncCameraFromEditor] = useState(-1);
   const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -132,7 +132,7 @@ export function App() {
           </>}
         </div>}
         {panel === "lighting" && <div className="settings-panel"><div className="setting-row"><span>Viewport lighting</span><button className={lighting ? "toggle on" : "toggle"} onClick={() => setLighting((value) => !value)}>{lighting ? "ON" : "OFF"}</button></div><div className="empty-panel">Persistent light rigs will use the SNC lighting data model.</div></div>}
-        {panel === "camera" && <div className="settings-panel"><div className="camera-mode-buttons"><button className={cameraMode === "editor" ? "camera-mode active" : "camera-mode"} onClick={() => setCameraMode("editor")}>Editor View</button><button className={cameraMode === "shot" ? "camera-mode active" : "camera-mode"} onClick={() => setCameraMode("shot")}>Animation Camera</button></div><button className="sync-camera-button" onClick={() => setSyncCameraFromEditor((value) => value + 1)}>Set Shot From Current View</button><div className="empty-panel">The editor camera stays free for navigation. The animation camera is a separate camera whose transform can be keyed on the animation timeline later.</div></div>}
+        {panel === "camera" && <div className="settings-panel"><div className="camera-mode-buttons"><button className={cameraMode === "editor" ? "camera-mode active" : "camera-mode"} onClick={() => setCameraMode("editor")}>Editor View</button><button className={cameraMode === "shot" ? "camera-mode active" : "camera-mode"} onClick={() => setCameraMode("shot")}>Animation Camera</button></div><button className="sync-camera-button" onClick={() => setSyncCameraFromEditor((value) => value + 1)}>Set Shot From Current View</button><div className="setting-row"><span>Performance</span><select value={performanceProfile} onChange={(event) => setPerformanceProfile(event.target.value as typeof performanceProfile)}><option value="auto">Auto</option><option value="battery">Battery</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select></div><div className="empty-panel">The editor camera stays free for navigation. The animation camera is a separate camera whose transform can be keyed on the animation timeline later.</div></div>}
       </aside>
       <section className="viewport-shell">
         <Canvas camera={{ position: [3, 2, 5], fov: 45 }} dpr={[1, 1.75]} gl={{ antialias: true }}>
