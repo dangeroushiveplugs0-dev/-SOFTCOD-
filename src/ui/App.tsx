@@ -5,7 +5,23 @@ import * as THREE from "three";
 
 type TransformMode = "translate" | "rotate" | "scale";
 
-function LoadedModel({ url, mode, onSelect }: { url: string; mode: TransformMode; onSelect: (o: THREE.Object3D | null) => void }) {
+type HierarchyItem = {
+  id: string;
+  name: string;
+  type: string;
+};
+
+function LoadedModel({
+  url,
+  mode,
+  onSelect,
+  onHierarchy,
+}: {
+  url: string;
+  mode: TransformMode;
+  onSelect: (o: THREE.Object3D | null) => void;
+  onHierarchy: (items: HierarchyItem[]) => void;
+}) {
   const { scene } = useGLTF(url);
   const [selected, setSelected] = useState<THREE.Object3D | null>(null);
 
@@ -13,6 +29,8 @@ function LoadedModel({ url, mode, onSelect }: { url: string; mode: TransformMode
 
   const root = useMemo(() => {
     const clone = scene.clone(true);
+    const items: HierarchyItem[] = [];
+
     clone.traverse((object) => {
       object.userData.sofcodSelectable = true;
       if ((object as THREE.Mesh).isMesh) {
@@ -20,9 +38,16 @@ function LoadedModel({ url, mode, onSelect }: { url: string; mode: TransformMode
         mesh.castShadow = true;
         mesh.receiveShadow = true;
       }
+      items.push({
+        id: object.uuid,
+        name: object.name || object.type || "Object",
+        type: object.type,
+      });
     });
+
+    onHierarchy(items);
     return clone;
-  }, [scene]);
+  }, [scene, onHierarchy]);
 
   return (
     <>
@@ -46,8 +71,21 @@ function LoadedModel({ url, mode, onSelect }: { url: string; mode: TransformMode
   );
 }
 
-function SceneContents({ url, mode, onSelect }: { url: string | null; mode: TransformMode; onSelect: (o: THREE.Object3D | null) => void }) {
+function SceneContents({
+  url,
+  mode,
+  lighting,
+  onSelect,
+  onHierarchy,
+}: {
+  url: string | null;
+  mode: TransformMode;
+  lighting: boolean;
+  onSelect: (o: THREE.Object3D | null) => void;
+  onHierarchy: (items: HierarchyItem[]) => void;
+}) {
   const { camera } = useThree();
+
   useEffect(() => {
     camera.position.set(3, 2, 5);
   }, [camera]);
@@ -62,7 +100,12 @@ function SceneContents({ url, mode, onSelect }: { url: string | null; mode: Tran
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} />
       {url ? (
         <Suspense fallback={null}>
-          <LoadedModel url={url} mode={mode} onSelect={onSelect} />
+          <LoadedModel
+            url={url}
+            mode={mode}
+            onSelect={onSelect}
+            onHierarchy={onHierarchy}
+          />
         </Suspense>
       ) : (
         <mesh>
@@ -74,6 +117,22 @@ function SceneContents({ url, mode, onSelect }: { url: string | null; mode: Tran
   );
 }
 
+function PanelButton({
+  active,
+  children,
+  onClick,
+}: {
+  active?: boolean;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button className={active ? "panel-button active" : "panel-button"} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
 export function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [modelUrl, setModelUrl] = useState<string | null>(null);
@@ -81,6 +140,8 @@ export function App() {
   const [mode, setMode] = useState<TransformMode>("translate");
   const [selectedName, setSelectedName] = useState("Nothing selected");
   const [lighting, setLighting] = useState(true);
+  const [hierarchy, setHierarchy] = useState<HierarchyItem[]>([]);
+  const [panel, setPanel] = useState<"outliner" | "inspector" | "lighting">("outliner");
 
   const importModel = () => inputRef.current?.click();
 
@@ -95,31 +156,126 @@ export function App() {
     setModelUrl(URL.createObjectURL(file));
     setModelName(file.name);
     setSelectedName("Nothing selected");
+    setHierarchy([]);
     event.target.value = "";
+  };
+
+  const selectItem = (item: HierarchyItem) => {
+    setSelectedName(item.name);
+    setPanel("inspector");
   };
 
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div><strong>SOFTCOD</strong><span>softbody-collision-drip</span></div>
-        <div className="top-actions"><button className="light-button" onClick={() => setLighting((value) => !value)}>{lighting ? "Lights" : "Dark"}</button><button className="import-button" onClick={importModel}>Import</button></div>
-        <input ref={inputRef} type="file" accept=".glb,model/gltf-binary" hidden onChange={onFile} />
+        <div className="brand">
+          <strong>SOFTCOD</strong>
+          <span>softbody-collision-drip</span>
+        </div>
+
+        <div className="top-actions">
+          <button className="light-button" onClick={() => setLighting((value) => !value)}>
+            {lighting ? "Lights" : "Dark"}
+          </button>
+          <button className="import-button" onClick={importModel}>Import</button>
+        </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".glb,model/gltf-binary"
+          hidden
+          onChange={onFile}
+        />
       </header>
 
-      <section className="viewport-shell">
-        <Canvas camera={{ position: [3, 2, 5], fov: 45 }} dpr={[1, 1.75]} gl={{ antialias: true }}>
-          <SceneContents url={modelUrl} mode={mode} onSelect={(object) => setSelectedName(object?.name || object?.type || "Object")} />
-        </Canvas>
-
-        <aside className="tool-panel">
-          <div className="file-name">{modelName}</div>
-          <div className="selection">{selectedName}</div>
-          <div className="tool-group">
-            <button className={mode === "translate" ? "active" : ""} onClick={() => setMode("translate")}>Move</button>
-            <button className={mode === "rotate" ? "active" : ""} onClick={() => setMode("rotate")}>Rotate</button>
-            <button className={mode === "scale" ? "active" : ""} onClick={() => setMode("scale")}>Scale</button>
+      <section className="editor-layout">
+        <aside className="side-panel left-panel">
+          <div className="panel-heading">
+            <strong>Scene</strong>
+            <span>{hierarchy.length}</span>
           </div>
-          <div className="hint">Pinch to zoom · one finger to orbit · tap a mesh to select</div>
+          <div className="panel-tabs">
+            <PanelButton active={panel === "outliner"} onClick={() => setPanel("outliner")}>Outliner</PanelButton>
+            <PanelButton active={panel === "lighting"} onClick={() => setPanel("lighting")}>Light</PanelButton>
+          </div>
+
+          {panel === "outliner" && (
+            <div className="outliner">
+              {hierarchy.length === 0 ? (
+                <div className="empty-panel">Import a GLB to inspect its scene.</div>
+              ) : (
+                hierarchy.map((item) => (
+                  <button
+                    key={item.id}
+                    className={selectedName === item.name ? "tree-item selected" : "tree-item"}
+                    onClick={() => selectItem(item)}
+                  >
+                    <span className="tree-icon">{item.type === "Mesh" ? "◇" : "○"}</span>
+                    <span>{item.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {panel === "lighting" && (
+            <div className="settings-panel">
+              <div className="setting-row">
+                <span>Viewport lighting</span>
+                <button className={lighting ? "toggle on" : "toggle"} onClick={() => setLighting((value) => !value)}>
+                  {lighting ? "ON" : "OFF"}
+                </button>
+              </div>
+              <div className="empty-panel">Persistent light rigs will use the SNC lighting data model.</div>
+            </div>
+          )}
+        </aside>
+
+        <section className="viewport-shell">
+          <Canvas
+            camera={{ position: [3, 2, 5], fov: 45 }}
+            dpr={[1, 1.75]}
+            gl={{ antialias: true }}
+          >
+            <SceneContents
+              url={modelUrl}
+              mode={mode}
+              lighting={lighting}
+              onSelect={(object) => setSelectedName(object?.name || object?.type || "Object")}
+              onHierarchy={setHierarchy}
+            />
+          </Canvas>
+
+          <aside className="tool-panel">
+            <div className="file-name">{modelName}</div>
+            <div className="selection">{selectedName}</div>
+            <div className="tool-group">
+              <button className={mode === "translate" ? "active" : ""} onClick={() => setMode("translate")}>Move</button>
+              <button className={mode === "rotate" ? "active" : ""} onClick={() => setMode("rotate")}>Rotate</button>
+              <button className={mode === "scale" ? "active" : ""} onClick={() => setMode("scale")}>Scale</button>
+            </div>
+            <div className="hint">Pinch to zoom · one finger to orbit · tap a mesh to select</div>
+          </aside>
+        </section>
+
+        <aside className="side-panel right-panel">
+          <div className="panel-heading">
+            <strong>Inspector</strong>
+            <span>Object</span>
+          </div>
+          <div className="inspector">
+            <div className="inspector-title">{selectedName}</div>
+            <div className="inspector-section">
+              <span>Transform</span>
+              <div className="transform-grid">
+                <button onClick={() => setMode("translate")}>Move</button>
+                <button onClick={() => setMode("rotate")}>Rotate</button>
+                <button onClick={() => setMode("scale")}>Scale</button>
+              </div>
+            </div>
+            <div className="empty-panel">Rig, material, morph, outfit, collision and physics properties will appear here as their editors land.</div>
+          </div>
         </aside>
       </section>
     </main>
