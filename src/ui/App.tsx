@@ -35,13 +35,12 @@ function LoadedModel({
 }) {
   const { scene, animations: gltfAnimations } = useGLTF(url);
   const [selected, setSelected] = useState<THREE.Object3D | null>(null);
-  const mixer = useMemo(() => new THREE.AnimationMixer(scene), [scene]);
 
   useEffect(() => () => {
     mixer.stopAllAction();
-    mixer.uncacheRoot(scene);
+    mixer.uncacheRoot(root);
     URL.revokeObjectURL(url);
-  }, [mixer, scene, url]);
+  }, [mixer, root, url]);
 
   useEffect(() => {
     onAnimations((gltfAnimations as THREE.AnimationClip[]).map((clip) => ({
@@ -76,6 +75,8 @@ function LoadedModel({
     });
     return clone;
   }, [scene]);
+
+  const mixer = useMemo(() => new THREE.AnimationMixer(root), [root]);
 
   const hierarchyItems = useMemo<HierarchyItem[]>(() => {
     const items: HierarchyItem[] = [];
