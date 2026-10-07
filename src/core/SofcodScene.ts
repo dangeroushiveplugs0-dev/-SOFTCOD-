@@ -1,4 +1,5 @@
 import type { MediaTrack } from "../media/types";
+import type { SofcodLightDesc } from "../rendering/lighting";
 import type {
   PhysicsSettings,
   RigidBodyDesc,
@@ -18,6 +19,7 @@ export interface SofcodScene {
   animationClips: string[];
   morphTargets: string[];
   outfits: string[];
+  lights: SofcodLightDesc[];
 
   // Solver-independent physics description.
   physics: {
