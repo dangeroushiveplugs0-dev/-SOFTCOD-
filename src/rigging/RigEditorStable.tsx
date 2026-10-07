@@ -79,12 +79,9 @@ function BoneVisual({ bone, selected, onSelect, curveData }: { bone: THREE.Bone;
       const source = new THREE.Vector3();
       let totalWeight = 0;
       for (const sample of curveData.samples) {
-        sample.mesh.getVertexPosition?.(sample.vertexIndex, source);
-        if (!sample.mesh.getVertexPosition) {
-          const position = sample.mesh.geometry.getAttribute("position");
-          source.fromBufferAttribute(position, sample.vertexIndex);
-          sample.mesh.boneTransform(sample.vertexIndex, source);
-        }
+        const position = sample.mesh.geometry.getAttribute("position");
+        source.fromBufferAttribute(position, sample.vertexIndex);
+        sample.mesh.boneTransform(sample.vertexIndex, source);
         sample.mesh.localToWorld(source);
         deformed.addScaledVector(source, sample.weight);
         totalWeight += sample.weight;
