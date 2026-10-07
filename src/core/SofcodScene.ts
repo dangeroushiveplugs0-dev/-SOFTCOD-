@@ -16,6 +16,7 @@ export interface SofcodScene {
   meshes: string[];
   materials: string[];
   skeletons: string[];
+  ikChains: string[];
   animationClips: string[];
   morphTargets: string[];
   outfits: string[];
