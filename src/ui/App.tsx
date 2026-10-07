@@ -40,7 +40,11 @@ function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing
     action.reset().play();
     action.paused = !playing;
   }, [activeAnimationId, gltfAnimations, mixer, model.id, playing]);
-  useFrame((state, delta) => {\n    performanceManager.beginFrame(state.clock.elapsedTime * 1000);\n    if (playing && activeAnimationId?.startsWith(`${model.id}::`)) mixer.update(delta);\n    performanceManager.endFrame(state.clock.elapsedTime * 1000);\n  });
+  useFrame((state, delta) => {
+    performanceManager.beginFrame(state.clock.elapsedTime * 1000);
+    if (playing && activeAnimationId?.startsWith(`${model.id}::`)) mixer.update(delta);
+    performanceManager.endFrame(state.clock.elapsedTime * 1000);
+  });
   useEffect(() => () => { mixer.stopAllAction(); mixer.uncacheRoot(root); URL.revokeObjectURL(model.url); }, [mixer, model.url, root]);
 
   let selected: THREE.Object3D | null = null;
@@ -59,8 +63,10 @@ function SceneContents({ models, mode, lighting, selectedObjectId, activeAnimati
   models: SceneModel[]; mode: TransformMode; lighting: boolean; selectedObjectId: string | null; activeAnimationId: string | null; playing: boolean; cameraMode: CameraViewMode; syncCameraFromEditor: number;
   onSelect: (modelId: string, object: THREE.Object3D) => void; onHierarchy: (items: HierarchyItem[]) => void; onAnimations: (items: AnimationItem[]) => void;
 }) {
-  const { camera } = useThree();\n  const performanceManager = useMemo(() => new PerformanceManager(), []);
-  useEffect(() => { camera.position.set(3, 2, 5); }, [camera]);\n  useFrame((state) => { performanceManager.beginFrame(state.clock.elapsedTime * 1000); performanceManager.endFrame(state.clock.elapsedTime * 1000); });
+  const { camera } = useThree();
+  const performanceManager = useMemo(() => new PerformanceManager(), []);
+  useEffect(() => { camera.position.set(3, 2, 5); }, [camera]);
+  useFrame((state) => { performanceManager.beginFrame(state.clock.elapsedTime * 1000); performanceManager.endFrame(state.clock.elapsedTime * 1000); });
   return <>
     <color attach="background" args={["#0b0d10"]} />
     {lighting && <ambientLight intensity={1.5} />}
@@ -89,7 +95,8 @@ export function App() {
   const [hierarchy, setHierarchy] = useState<HierarchyItem[]>([]);
   const [animations, setAnimations] = useState<AnimationItem[]>([]);
   const [panel, setPanel] = useState<"outliner" | "lighting" | "animation" | "camera">("outliner");
-  const [cameraMode, setCameraMode] = useState<CameraViewMode>("editor");\n  const [performanceProfile, setPerformanceProfile] = useState<"auto" | "battery" | "balanced" | "quality">("auto");
+  const [cameraMode, setCameraMode] = useState<CameraViewMode>("editor");
+  const [performanceProfile, setPerformanceProfile] = useState<"auto" | "battery" | "balanced" | "quality">("auto");
   const [syncCameraFromEditor, setSyncCameraFromEditor] = useState(-1);
   const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
