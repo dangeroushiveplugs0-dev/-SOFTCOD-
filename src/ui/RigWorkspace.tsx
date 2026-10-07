@@ -197,7 +197,7 @@ export function RigWorkspace() {
   const selectedRig = selectedModelId ? rigs[selectedModelId] ?? null : null;
 
   return <main className="app-shell">
-    <header className="topbar"><div className="brand"><strong>SOFTCOD</strong><span>{models.length} model{models.length === 1 ? "" : "s"} in scene</span></div><div className="top-actions"><button className="light-button" onClick={() => setLighting((value) => !value)}>{lighting ? "Lights" : "Dark"}</button><button className="import-button" onClick={() => inputRef.current?.click()}>Import</button>{models.length > 0 && <button className="clear-button" onClick={clear}>Clear</button>}</div><input ref={inputRef} type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json,application/octet-stream" multiple onChange={onFiles} /></header>
+    <header className="topbar"><div className="brand"><strong>SOFTCOD</strong><span>{models.length} model{models.length === 1 ? "" : "s"} in scene</span></div><div className="top-actions"><button className="light-button" onClick={() => setLighting((value) => !value)}>{lighting ? "Lights" : "Dark"}</button><button className="import-button" onClick={() => inputRef.current?.click()}>Import</button>{models.length > 0 && <button className="clear-button" onClick={clear}>Clear</button>}</div><input className="file-picker-input" ref={inputRef} type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json,application/octet-stream" multiple onChange={onFiles} /></header>
     <section className="editor-layout">
       <aside className="side-panel left-panel">
         <div className="panel-heading"><strong>Rig Editor</strong><span>{models.length} model{models.length === 1 ? "" : "s"}</span></div>
