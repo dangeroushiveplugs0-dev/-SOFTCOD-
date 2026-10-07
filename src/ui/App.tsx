@@ -14,7 +14,7 @@ type HierarchyItem = { id: string; name: string; type: string; modelId: string; 
 type AnimationItem = { id: string; modelId: string; modelName: string; name: string; duration: number };
 
 function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing, onSelect, onHierarchy, onAnimations }: {
-  model: SceneModel; mode: TransformMode; selectedObjectId: string | null; activeAnimationId: string | null; playing: boolean;
+  model: SceneModel; mode: TransformMode; selectedObjectId: string | null; activeAnimationId: string | null; playing: boolean; performanceManager: PerformanceManager;
   onSelect: (modelId: string, object: THREE.Object3D) => void; onHierarchy: (items: HierarchyItem[]) => void; onAnimations: (items: AnimationItem[]) => void;
 }) {
   const { scene, animations: gltfAnimations } = useGLTF(model.url);
@@ -42,9 +42,14 @@ function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing
     action.paused = !playing;
   }, [activeAnimationId, gltfAnimations, mixer, model.id, playing]);
   useFrame((state, delta) => {
-    performanceManager.beginFrame(state.clock.elapsedTime * 1000);
-    if (playing && activeAnimationId?.startsWith(`${model.id}::`)) mixer.update(delta);
-    performanceManager.endFrame(state.clock.elapsedTime * 1000);
+    if (playing && activeAnimationId?.startsWith(model.id + "::")) {
+      const now = performance.now();
+      const visibility = testSceneVisibility(root, state.camera);
+      const profile = performanceManager.resolveAutoProfile();
+      const priority = visibility.visible ? "normal" : "distant";
+      const hz = visibility.visible ? profile.animationUpdateHz : profile.distantUpdateHz;
+      if (performanceManager.scheduler.shouldUpdate(model.id, hz, now, priority)) mixer.update(delta);
+    }
   });
   useEffect(() => () => { mixer.stopAllAction(); mixer.uncacheRoot(root); URL.revokeObjectURL(model.url); }, [mixer, model.url, root]);
 
