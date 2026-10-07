@@ -1,37 +1,12 @@
-import type { MediaTrack } from "../media/types";
-import type { SofcodLightDesc } from "../rendering/lighting";
-import type {
-  PhysicsSettings,
-  RigidBodyDesc,
-  SoftBodyDesc,
-  ClothDesc,
-  ConstraintDesc,
-} from "../physics/types";
+import type { AnimationClip } from "three";
 
-export interface SofcodScene {
-  id: string;
-  name: string;
-
-  // Editable scene data.
-  meshes: string[];
-  materials: string[];
+export type SofcodScene = {
+  version: number;
+  models: string[];
   skeletons: string[];
   ikChains: string[];
   animationClips: string[];
-  morphTargets: string[];
-  outfits: string[];
-  lights: SofcodLightDesc[];
+  lighting: unknown;
+};
 
-  // Solver-independent physics description.
-  physics: {
-    settings: PhysicsSettings;
-    rigidBodies: RigidBodyDesc[];
-    softBodies: SoftBodyDesc[];
-    cloth: ClothDesc[];
-    constraints: ConstraintDesc[];
-  };
-
-  // Baked simulation and rendered media references.
-  simulationCacheIds: string[];
-  mediaTracks: MediaTrack[];
-}
+export const SNC_VERSION = 2;
