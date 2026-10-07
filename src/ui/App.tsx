@@ -4,6 +4,7 @@ import { OrbitControls, TransformControls, useGLTF, Grid, Environment } from "@r
 import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { AnimationCameraRig, type CameraViewMode } from "./AnimationCameraRig";
+import { PerformanceManager } from "../performance/PerformanceManager";
 
 type TransformMode = "translate" | "rotate" | "scale";
 type SceneModel = { id: string; name: string; url: string };
@@ -17,6 +18,7 @@ function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing
   const { scene, animations: gltfAnimations } = useGLTF(model.url);
   const root = useMemo(() => cloneSkeleton(scene), [scene]);
   const mixer = useMemo(() => new THREE.AnimationMixer(root), [root]);
+  const performanceManager = useMemo(() => new PerformanceManager(), []);
   const animationItems = useMemo(() => (gltfAnimations as THREE.AnimationClip[]).map((clip) => ({
     id: `${model.id}::${clip.name || "Unnamed"}`, modelId: model.id, modelName: model.name, name: clip.name || "Unnamed", duration: clip.duration,
   })), [gltfAnimations, model.id, model.name]);
@@ -38,7 +40,7 @@ function LoadedModel({ model, mode, selectedObjectId, activeAnimationId, playing
     action.reset().play();
     action.paused = !playing;
   }, [activeAnimationId, gltfAnimations, mixer, model.id, playing]);
-  useFrame((_, delta) => { if (playing && activeAnimationId?.startsWith(`${model.id}::`)) mixer.update(delta); });
+  useFrame((state, delta) => {\n    performanceManager.beginFrame(state.clock.elapsedTime * 1000);\n    if (playing && activeAnimationId?.startsWith(`${model.id}::`)) mixer.update(delta);\n    performanceManager.endFrame(state.clock.elapsedTime * 1000);\n  });
   useEffect(() => () => { mixer.stopAllAction(); mixer.uncacheRoot(root); URL.revokeObjectURL(model.url); }, [mixer, model.url, root]);
 
   let selected: THREE.Object3D | null = null;
@@ -57,8 +59,8 @@ function SceneContents({ models, mode, lighting, selectedObjectId, activeAnimati
   models: SceneModel[]; mode: TransformMode; lighting: boolean; selectedObjectId: string | null; activeAnimationId: string | null; playing: boolean; cameraMode: CameraViewMode; syncCameraFromEditor: number;
   onSelect: (modelId: string, object: THREE.Object3D) => void; onHierarchy: (items: HierarchyItem[]) => void; onAnimations: (items: AnimationItem[]) => void;
 }) {
-  const { camera } = useThree();
-  useEffect(() => { camera.position.set(3, 2, 5); }, [camera]);
+  const { camera } = useThree();\n  const performanceManager = useMemo(() => new PerformanceManager(), []);
+  useEffect(() => { camera.position.set(3, 2, 5); }, [camera]);\n  useFrame((state) => { performanceManager.beginFrame(state.clock.elapsedTime * 1000); performanceManager.endFrame(state.clock.elapsedTime * 1000); });
   return <>
     <color attach="background" args={["#0b0d10"]} />
     {lighting && <ambientLight intensity={1.5} />}
