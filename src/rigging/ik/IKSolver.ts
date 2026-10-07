@@ -12,6 +12,24 @@ function worldPosition(object: THREE.Object3D): THREE.Vector3 {
   return object.getWorldPosition(new THREE.Vector3());
 }
 
+function rotateBoneToward(bone: THREE.Object3D, desiredWorldDirection: THREE.Vector3, weight: number): void {
+  const direction = desiredWorldDirection.clone().normalize();
+  if (direction.lengthSq() < 1e-8) return;
+
+  const parent = bone.parent;
+  const parentQuaternion = parent
+    ? parent.getWorldQuaternion(new THREE.Quaternion())
+    : new THREE.Quaternion();
+
+  const currentWorldQuaternion = bone.getWorldQuaternion(new THREE.Quaternion());
+  const currentAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(currentWorldQuaternion).normalize();
+  const delta = new THREE.Quaternion().setFromUnitVectors(currentAxis, direction);
+  const desiredWorldQuaternion = delta.multiply(currentWorldQuaternion);
+  const desiredLocalQuaternion = parentQuaternion.clone().invert().multiply(desiredWorldQuaternion);
+
+  bone.quaternion.slerp(desiredLocalQuaternion, THREE.MathUtils.clamp(weight, 0, 1));
+}
+
 export class IKSolver {
   buildState(chain: IKChainDefinition, bones: IKBoneLike[]): IKChainState {
     const rest: IKRestState[] = bones.map((bone, index) => {
@@ -33,6 +51,7 @@ export class IKSolver {
       currentLengths: rest.map((item) => item.restLength),
       stretchAmount: 0,
       solved: false,
+      restScales: bones.map((bone) => bone.object.scale.clone()),
     };
   }
 
@@ -65,6 +84,9 @@ export class IKSolver {
       return state;
     }
 
+    // FABRIK computes the desired joint positions. We then convert those
+    // positions into bone rotations instead of moving the skeleton's joints,
+    // which keeps authored bone origins stable.
     for (let iteration = 0; iteration < 8; iteration += 1) {
       points[points.length - 1].copy(effectiveTarget);
 
@@ -86,14 +108,19 @@ export class IKSolver {
     }
 
     for (let i = 0; i < bones.length; i += 1) {
-      const current = worldPosition(bones[i].object);
-      const desired = points[Math.min(i, points.length - 1)];
-      current.lerp(desired, weight);
+      const end = i < points.length - 1
+        ? points[i + 1]
+        : effectiveTarget;
+      const start = points[i];
+      rotateBoneToward(bones[i].object, end.clone().sub(start), weight);
 
-      const parent = bones[i].object.parent;
-      if (parent) {
-        const localTarget = parent.worldToLocal(current.clone());
-        bones[i].object.position.copy(localTarget);
+      const baseScale = state.restScales[i];
+      bones[i].object.scale.copy(baseScale);
+
+      if (state.chain.mode === "stylized") {
+        // Most authored character bones point down local +Y. Stretch that
+        // axis only, preserving the other two dimensions.
+        bones[i].object.scale.y = baseScale.y * ratio;
       }
     }
 
