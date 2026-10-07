@@ -1,6 +1,6 @@
 # SOFTCOD IK and secondary motion
 
-SOFTCOD uses one IK system with two authored deformation modes.
+SOFTCOD supports per-model and per-chain IK modes. Different models in the same scene may use different IK behavior.
 
 ## Human IK
 
@@ -21,6 +21,19 @@ Stylized IK intentionally permits limited bone-chain stretch.
 - Secondary motion applies inertia and a return force so the chain moves back toward authored proportions.
 - A stretched chain does not permanently redefine the authored rig.
 
+## Per-model independence
+
+IK configuration belongs to the individual model rig, not to the global scene.
+
+For example:
+
+- Character A can use Human IK.
+- Character B can use Stylized IK.
+- A prop can have no IK at all.
+- One character can also mix modes across chains when appropriate.
+
+Each model retains its own IK rig, targets, poles, rest lengths, and secondary-motion state.
+
 ## Impact and ripple layer
 
 The IK solver exposes the solved pose and stretch amount to the secondary-motion system.
@@ -30,8 +43,8 @@ That layer can drive local displacement, inertial lag, spring-back, contact or i
 ## Evaluation order
 
 1. Evaluate authored animation.
-2. Evaluate IK targets and pole vectors.
-3. Solve Human or Stylized IK.
+2. Evaluate each model's IK targets and pole vectors.
+3. Solve each model's IK chains using that model's selected mode.
 4. Apply temporary stretch constraints.
 5. Evaluate secondary motion and soft-body response.
 6. Apply final skinning transforms.
@@ -41,6 +54,6 @@ Interactive preview may throttle secondary-motion updates for performance. Final
 
 ## Rig UI
 
-The Rig panel should expose IK chain, mode, target, pole, weight, stretch limit, stiffness, damping, inertia, return speed, and impact/ripple strength.
+The Rig panel should expose the selected model's IK chains, mode, target, pole, weight, stretch limit, stiffness, damping, inertia, return speed, and impact/ripple strength.
 
 Human mode keeps advanced stretch controls hidden or locked. Stylized mode exposes the stretch controls.
