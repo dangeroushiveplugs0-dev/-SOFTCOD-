@@ -126,3 +126,7 @@ When the user opens an SNC:
 4. Make animation, physics, and media tracks available from the same timeline.
 5. Allow the user to edit the asset without destroying the existing baked result.
 6. Allow re-baking and replacement of individual cache/media outputs.
+
+## Lighting chunk data
+
+The SNC scene stores editable lighting descriptors in the scene/lighting data, including stable IDs, light type, color, intensity, transforms, attenuation/range, spot parameters, and shadow settings. Lighting remains separate from baked render output so lights can be edited without rewriting rendered media. The renderer may map these descriptors to Three.js light types; for example, directional lights use a target for their direction and point/spot/directional lights can use shadow maps. Three.js documents these behaviors and the associated shadow tradeoffs. citeturn0search2turn0search4turn0search5
