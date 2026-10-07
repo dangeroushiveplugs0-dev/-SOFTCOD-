@@ -86,8 +86,8 @@ export function App() {
   const onFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!/\.(glb|gltf)$/i.test(file.name)) {
-      setModelName("GLB/glTF required for this first importer");
+    if (!/\.glb$/i.test(file.name)) {
+      setModelName("GLB required for this first importer");
       return;
     }
     if (modelUrl) URL.revokeObjectURL(modelUrl);
@@ -102,7 +102,7 @@ export function App() {
       <header className="topbar">
         <div><strong>SOFTCOD</strong><span>softbody-collision-drip</span></div>
         <button className="import-button" onClick={importModel}>Import</button>
-        <input ref={inputRef} type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden onChange={onFile} />
+        <input ref={inputRef} type="file" accept=".glb,model/gltf-binary" hidden onChange={onFile} />
       </header>
 
       <section className="viewport-shell">
